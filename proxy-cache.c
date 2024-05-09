@@ -300,18 +300,18 @@ void insert_cache_node(cache *c, char *key, char *value, long size)
 // 캐시에서 노드를 삭제하는 함수
 void delete_cache_node(cache *c, cache_node *node)
 {
-    if (node->prev != NULL)
+    if (node->prev != NULL)                 // 첫번째 노드가 아닐 때
         node->prev->next = node->next;
-    else
+    else                                    // 첫번째 노드일 때
         c->root = node->next;
     
-    if (node->next != NULL)
+    if (node->next != NULL)                 // 마지막 노드가 아닐 때
         node->next->prev = node->prev;
-    else
+    else                                    // 마지막 노드일 때
         c->tail = node->prev;
     
-    c->size -= node->size;
-    free(node->key);
+    c->size -= node->size;                  // 사이즈 변경
+    free(node->key);                        // 메모리 해제
     free(node->value);
     free(node);
 }
