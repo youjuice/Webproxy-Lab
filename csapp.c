@@ -545,11 +545,11 @@ void Fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
  * Sockets interface wrappers
  ****************************/
 
-int Socket(int domain, int type, int protocol) 
+int Socket(int domain, int type, int protocol)                      // 소켓 생성 함수
 {
     int rc;
 
-    if ((rc = socket(domain, type, protocol)) < 0)
+    if ((rc = socket(domain, type, protocol)) < 0)     
 	unix_error("Socket error");
     return rc;
 }
@@ -562,7 +562,7 @@ void Setsockopt(int s, int level, int optname, const void *optval, int optlen)
 	unix_error("Setsockopt error");
 }
 
-void Bind(int sockfd, struct sockaddr *my_addr, int addrlen) 
+void Bind(int sockfd, struct sockaddr *my_addr, int addrlen)        // 소켓에 주소를 할당하는 함수
 {
     int rc;
 
@@ -570,7 +570,7 @@ void Bind(int sockfd, struct sockaddr *my_addr, int addrlen)
 	unix_error("Bind error");
 }
 
-void Listen(int s, int backlog) 
+void Listen(int s, int backlog)                                     // 서버 소켓에서 클라이언트의 연결 요청을 수신할 수 있도록 설정
 {
     int rc;
 
@@ -578,7 +578,7 @@ void Listen(int s, int backlog)
 	unix_error("Listen error");
 }
 
-int Accept(int s, struct sockaddr *addr, socklen_t *addrlen) 
+int Accept(int s, struct sockaddr *addr, socklen_t *addrlen)        // 클라이언트의 연결 요청을 수락하고 새로운 소켓을 생성하여 통신을 위한 새로운 연결을 만듬
 {
     int rc;
 
@@ -587,7 +587,7 @@ int Accept(int s, struct sockaddr *addr, socklen_t *addrlen)
     return rc;
 }
 
-void Connect(int sockfd, struct sockaddr *serv_addr, int addrlen) 
+void Connect(int sockfd, struct sockaddr *serv_addr, int addrlen)   // 클라이언트 소켓에서 서버에 연결을 요청하는 함수
 {
     int rc;
 
@@ -600,7 +600,7 @@ void Connect(int sockfd, struct sockaddr *serv_addr, int addrlen)
  *******************************/
 /* $begin getaddrinfo */
 void Getaddrinfo(const char *node, const char *service, 
-                 const struct addrinfo *hints, struct addrinfo **res)
+                 const struct addrinfo *hints, struct addrinfo **res)       // 호스트 이름, 호스트 주소, 서비스 이름, 포트 번호를 소켓 주소 구조체로 변환
 {
     int rc;
 
@@ -609,7 +609,7 @@ void Getaddrinfo(const char *node, const char *service,
 }
 /* $end getaddrinfo */
 
-void Getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host, 
+void Getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,    // getaddrinfo의 역함수
                  size_t hostlen, char *serv, size_t servlen, int flags)
 {
     int rc;
@@ -946,22 +946,30 @@ ssize_t Rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
  *       -2 for getaddrinfo error
  *       -1 with errno set for other errors.
  */
+/* open_clientfd - 클라이언트는 open_clientfd를 호출해서 서버와 연결 설정
+ * 1. 접속을 원하는 서버와 포트의 주소를 getaddrinfo 함수를 통해 가져온다.
+ * 2. getaddrinfo 함수를 통해 생성된 addrinfo 연결리스트 내 주소들과 connect를 시도한다.
+ * 3. connect에 성공한 clientfd를 반환한다.
+ */
+
 /* $begin open_clientfd */
-int open_clientfd(char *hostname, char *port) {
+int open_clientfd(char *hostname, char *port) {         
     int clientfd, rc;
     struct addrinfo hints, *listp, *p;
 
     /* Get a list of potential server addresses */
+    // hints 구조체 초기화 후 생성
     memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_socktype = SOCK_STREAM;  /* Open a connection */
-    hints.ai_flags = AI_NUMERICSERV;  /* ... using a numeric port arg. */
-    hints.ai_flags |= AI_ADDRCONFIG;  /* Recommended for connections */
+    hints.ai_socktype = SOCK_STREAM;  /* Open a connection - 소켓 유형: TCP 소켓 */
+    hints.ai_flags = AI_NUMERICSERV;  /* ... using a numeric port arg. - 포트 번호를 숫자 형식으로 지정 */
+    hints.ai_flags |= AI_ADDRCONFIG;  /* Recommended for connections - 호스트의 IP 주소 설정에 따라 주소 패밀리 선택 */
     if ((rc = getaddrinfo(hostname, port, &hints, &listp)) != 0) {
         fprintf(stderr, "getaddrinfo failed (%s:%s): %s\n", hostname, port, gai_strerror(rc));
         return -2;
     }
   
     /* Walk the list for one that we can successfully connect to */
+    // getaddrinfo를 통해 얻은 addrinfo 연결리스트를 돌며 connect 시도
     for (p = listp; p; p = p->ai_next) {
         /* Create a socket descriptor */
         if ((clientfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) 
@@ -993,16 +1001,24 @@ int open_clientfd(char *hostname, char *port) {
  *       -2 for getaddrinfo error
  *       -1 with errno set for other errors.
  */
+/* open_listenfd - 서버는 open_listenfd 함수를 호출해서 연결 요청을 받을 준비가 된 듣기 식별자 생성
+ * 1. getaddrinfo 함수를 실행해 addrinfo 구조체의 연결리스트를 생성한다. (이 때 host를 NULL로 설정하면 host 주소는 localhost가 할당됨)
+ * 2. getaddrinfo 함수를 통해 생성된 addrinfo 연결리스트 내 주소들과 bind를 시도한다.
+ * 3. bind에 성공하면 bind에 성공한 소켓을 listen 함수에 인자로 넣어 listen 소켓으로 만들고 이를 반환
+ * 4. bind에 실패하면 연결리스트의 남은 주소들과 bind를 시도한다.
+ */
+
 /* $begin open_listenfd */
-int open_listenfd(char *port) 
+int open_listenfd(char *port)               
 {
     struct addrinfo hints, *listp, *p;
     int listenfd, rc, optval=1;
 
     /* Get a list of potential server addresses */
+    // hints 구조체 초기화 후 생성
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_socktype = SOCK_STREAM;             /* Accept connections */
-    hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG; /* ... on any IP address */
+    hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG; /* ... on any IP address - AI_PASSIVE를 설정하면 듣기 소켓으로 이용 가능*/
     hints.ai_flags |= AI_NUMERICSERV;            /* ... using port number */
     if ((rc = getaddrinfo(NULL, port, &hints, &listp)) != 0) {
         fprintf(stderr, "getaddrinfo failed (port %s): %s\n", port, gai_strerror(rc));
@@ -1010,12 +1026,14 @@ int open_listenfd(char *port)
     }
 
     /* Walk the list for one that we can bind to */
+    // getaddrinfo를 통해 얻은 addrinfo 연결리스트를 돌며 bind 시도
     for (p = listp; p; p = p->ai_next) {
         /* Create a socket descriptor */
         if ((listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) 
             continue;  /* Socket failed, try the next */
 
         /* Eliminates "Address already in use" error from bind */
+        // 소켓 옵션 설정 : SO_REUSEADDR 옵션은 이미 사용 중인 주소를 재사용할 수 있는 옵션
         setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,    //line:netp:csapp:setsockopt
                    (const void *)&optval , sizeof(int));
 
